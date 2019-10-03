@@ -4,7 +4,7 @@
 
 import argparse
 import getpass
-import getenv
+from os import getenv
 import gzip
 import json
 import psycopg2
