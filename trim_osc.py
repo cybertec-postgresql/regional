@@ -4,6 +4,7 @@
 
 import argparse
 import getpass
+import getenv
 import gzip
 import json
 import psycopg2
@@ -87,7 +88,8 @@ if poly is None or not options.dbname:
     sys.exit()
 
 # connect to database
-passwd = ""
+passwd = getenv("PGPASSWORD", "")
+
 if options.password:
     passwd = getpass.getpass("Please enter your password: ")
 
