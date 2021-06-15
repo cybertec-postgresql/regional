@@ -9,6 +9,7 @@ import gzip
 import json
 import psycopg2
 import sys
+import os
 from lxml import etree
 from shapely.geometry import shape, Polygon, Point
 
@@ -57,6 +58,7 @@ def box(x1, y1, x2, y2):
     return Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
 
 default_user = getpass.getuser()
+default_prefix = 'planet_osm'
 
 parser = argparse.ArgumentParser(description='Trim osmChange file to a polygon and a database data')
 parser.add_argument('osc', type=argparse.FileType('rb'), help='input osc file, "-" for stdin')
@@ -72,6 +74,9 @@ parser.add_argument('-b', '--bbox', nargs=4, type=float,
                     metavar=('Xmin', 'Ymin', 'Xmax', 'Ymax'), help='Bounding box')
 parser.add_argument('-z', '--gzip', action='store_true', help='source and output files are gzipped')
 parser.add_argument('-v', dest='verbose', action='store_true', help='display debug information')
+parser.add_argument('-P', '--prefix',
+                    default=default_prefix,
+                    help='Prefix for table names (default: {0})'.format(default_prefix))
 options = parser.parse_args()
 
 # read poly
@@ -86,12 +91,14 @@ if options.poly:
 if poly is None or not options.dbname:
     parser.print_help()
     sys.exit()
-
+    
+prefix = options.prefix
+    
 # connect to database
 passwd = getenv("PGPASSWORD", "")
 
 if options.password:
-    passwd = getpass.getpass("Please enter your password: ")
+    passwd = os.getenv('PGPASSWORD') or getpass.getpass("Please enter your password: ")
 
 try:
     db = psycopg2.connect(database=options.dbname, user=options.user, password=passwd,
@@ -120,7 +127,8 @@ for node in root.iter('node'):
             nodesM.append(int(node.get('id')))
 
 # Save modified nodes that are already in the database
-cur.execute('select id from planet_osm_nodes where id = ANY(%s);', (nodesM,))
+q1='select id from {0}_nodes where id = ANY(%s);'.format(prefix)
+cur.execute(q1, (nodesM,))
 for row in cur:
     nodes[str(row[0])] = True
 
@@ -149,7 +157,8 @@ for way in root.iter('way'):
             if way.getparent().tag == 'modify':
                 waysM.append(wayId)
 
-cur.execute('select id from planet_osm_ways where id = ANY(%s);', (waysM,))
+q2 = 'select id from {0}_ways where id = ANY(%s);'.format(prefix)
+cur.execute(q2, (waysM,))
 for row in cur:
     ways.remove(row[0])
     # iterate over osmChange/<mode>/way[id=<id>]/nd and set nodes[ref] to True
@@ -165,7 +174,8 @@ for rel in root.iter('relation'):
     if rel.getparent().tag == 'modify':
         relations.append(int(rel.get('id')))
 
-cur.execute('select id from planet_osm_rels where id = ANY(%s);', (relations,))
+q3 = 'select id from {0}_rels where id = ANY(%s);'.format(prefix)
+cur.execute(q3, (relations,))
 for row in cur:
     relations.remove(row[0])
 
